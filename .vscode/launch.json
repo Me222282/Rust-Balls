@@ -1,0 +1,50 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'rusty_balls'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=rusty_balls",
+                    "--package=rusty_balls",
+                ],
+                "filter": {
+                    "name": "rusty_balls",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "terminal": "external",
+            "env": {
+                "RUST_BackTRACE": "1"
+            }
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'rusty_balls'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=rusty_balls",
+                    "--package=rusty_balls"
+                ],
+                "filter": {
+                    "name": "rusty_balls",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "terminal": "external",
+            // "env": {
+            //     "RUSTFLAGS": "${env:RUSTFLAGS} -A unused_parens"
+            // }
+        }
+    ]
+}
