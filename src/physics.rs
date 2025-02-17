@@ -1,6 +1,7 @@
 use cgmath::InnerSpace;
 
 use crate::ball::*;
+use crate::maths::*;
 use std::vec::Vec;
 use std::slice::Iter;
 

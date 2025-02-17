@@ -1,11 +1,4 @@
-use cgmath::{Vector2, Vector3, Vector4};
-
-#[allow(non_camel_case_types)]
-pub type real = f32;
-pub type Vec2 = Vector2<real>;
-pub type Vec3 = Vector3<real>;
-pub type Vec4 = Vector4<real>;
-pub type Colour = Vector3<u8>;
+use crate::maths::*;
 
 pub const GRAVITY: real = 1000.0;
 
@@ -17,7 +10,8 @@ pub struct Ball
     pub colour: Colour
 }
 
-impl Ball {
+impl Ball
+{
     pub fn verlet(&mut self, dt: real)
     {
         let vel = self.velocity();
