@@ -2,6 +2,7 @@ mod ball;
 mod physics;
 mod program;
 mod maths;
+mod graphics;
 
 use crate::program::*;
 

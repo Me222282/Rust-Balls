@@ -3,19 +3,31 @@ use wgpu::util::DeviceExt;
 use winit::{event::WindowEvent, window::Window};
 
 use crate::maths::*;
+use crate::graphics::*;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
-struct Vertex {
-    position: Vec3,
-    color: [f32; 3],
+struct Vertex
+{
+    position: Vec2,
+    uv: Vec2,
+}
+impl Vertex {
+    const fn new(pos: Vec2, uv: Vec2) -> Vertex
+    {
+        return Vertex
+        {
+            position: pos,
+            uv
+        };
+    }
 }
 unsafe impl bytemuck::Pod for Vertex {}
 unsafe impl bytemuck::Zeroable for Vertex {}
 impl Vertex
 {
-    const ATTRIBS: [wgpu::VertexAttribute; 2] =
-        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3];
+    const ATTRIBS: [VertexAttribute; 2] =
+        vertex_attr_array![0 => Float32x2, 1 => Float32x2];
     
     fn desc() -> VertexBufferLayout<'static>
     {
@@ -27,10 +39,10 @@ impl Vertex
     }
 }
 const VERTICES: &[Vertex] = &[
-    Vertex { position: vec3([0.5, 0.5, 0.0]), color: [1.0, 0.0, 1.0] },
-    Vertex { position: vec3([-0.5, 0.5, 0.0]), color: [1.0, 0.0, 0.0] },
-    Vertex { position: vec3([-0.5, -0.5, 0.0]), color: [0.0, 1.0, 0.0] },
-    Vertex { position: vec3([0.5, -0.5, 0.0]), color: [0.0, 0.0, 1.0] },
+    Vertex::new(vec2(0.5, 0.5), vec2(1.0, 1.0)),
+    Vertex::new(vec2(-0.5, 0.5), vec2(0.0, 1.0)),
+    Vertex::new(vec2(-0.5, -0.5), vec2(0.0, 0.0)),
+    Vertex::new(vec2(0.5, -0.5), vec2(1.0, 0.0))
 ];
 const INDICES: &[u16] = &[
     0, 1, 2,
@@ -46,8 +58,7 @@ pub struct State<'a>
     pub size: winit::dpi::PhysicalSize<u32>,
     window: &'a Window,
     render_pipeline: RenderPipeline,
-    vertex_buffer: Buffer,
-    index_buffer: Buffer
+    draw_object: DrawObject
 }
 
 impl<'a> State<'a>
@@ -127,9 +138,9 @@ impl<'a> State<'a>
                 compilation_options: PipelineCompilationOptions::default(),
             }),
             primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList, // 1.
+                topology: PrimitiveTopology::TriangleList,
                 strip_index_format: None,
-                front_face: FrontFace::Ccw, // 2.
+                front_face: FrontFace::Ccw,
                 cull_mode: Some(Face::Back),
                 // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
                 polygon_mode: PolygonMode::Fill,
@@ -148,20 +159,7 @@ impl<'a> State<'a>
             cache: None
         });
         
-        let vertex_buffer = device.create_buffer_init(
-            &util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
-                usage: BufferUsages::VERTEX,
-            }
-        );
-        let index_buffer = device.create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            }
-        );
+        let draw_object = DrawObject::new(&device, VERTICES, INDICES);
         
         return Self {
             surface,
@@ -171,8 +169,7 @@ impl<'a> State<'a>
             size,
             window,
             render_pipeline,
-            vertex_buffer,
-            index_buffer
+            draw_object
         };
     }
 
@@ -230,9 +227,7 @@ impl<'a> State<'a>
         });
         
         render_pass.set_pipeline(&self.render_pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
-        render_pass.draw_indexed(0..6, 0, 0..1);
+        self.draw_object.draw(&mut render_pass);
         
         drop(render_pass);
         // submit will accept anything that implements IntoIter

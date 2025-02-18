@@ -7,9 +7,13 @@ pub type Vec3 = Vector3<real>;
 pub type Vec4 = Vector4<real>;
 pub type Colour = Vector3<u8>;
 
-pub const fn vec3(data: [real; 3]) -> Vec3
+pub const fn vec3(x: real, y: real, z: real) -> Vec3
 {
-    return Vec3::new(data[0], data[1], data[2]);
+    return Vec3::new(x, y, z);
+}
+pub const fn vec2(x: real, y: real) -> Vec2
+{
+    return Vec2::new(x, y);
 }
 pub const fn colour(data: [u8; 3]) -> Colour
 {
