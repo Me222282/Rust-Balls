@@ -2,17 +2,20 @@ use bytemuck::*;
 use util::DeviceExt;
 use wgpu::*;
 
-pub trait IndexFormatType {
+pub trait IndexFormatType
+{
     fn get_format() -> IndexFormat;
 }
 
-impl IndexFormatType for u16 {
+impl IndexFormatType for u16
+{
     fn get_format() -> IndexFormat
     {
         return IndexFormat::Uint16;
     }
 }
-impl IndexFormatType for u32 {
+impl IndexFormatType for u32
+{
     fn get_format() -> IndexFormat
     {
         return IndexFormat::Uint32;

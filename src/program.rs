@@ -1,9 +1,10 @@
+use cgmath::Vector2;
 use wgpu::*;
-use wgpu::util::DeviceExt;
-use winit::{event::WindowEvent, window::Window};
+use winit::event::WindowEvent;
 
 use crate::maths::*;
 use crate::graphics::*;
+use crate::state::WinFunc;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -49,67 +50,18 @@ const INDICES: &[u16] = &[
     2, 3, 0
 ];
 
-pub struct State<'a>
+
+pub struct Program
 {
-    surface: Surface<'a>,
-    device: Device,
-    queue: Queue,
-    config: SurfaceConfiguration,
-    pub size: winit::dpi::PhysicalSize<u32>,
-    window: &'a Window,
     render_pipeline: RenderPipeline,
     draw_object: DrawObject
 }
 
-impl<'a> State<'a>
+impl WinFunc for Program
 {
     // Creating some of the wgpu types requires async code
-    pub async fn new(window: &'a Window) -> State<'a>
+    fn new(device: &Device, config: &SurfaceConfiguration) -> Self
     {
-        let size = window.inner_size();
-
-        // The instance is a handle to our GPU
-        let instance = Instance::new(InstanceDescriptor {
-            backends: Backends::VULKAN,
-            ..Default::default()
-        });
-
-        let surface = instance.create_surface(window).unwrap();
-
-        let adapter = instance.request_adapter(
-            &RequestAdapterOptions {
-                power_preference: PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            },
-        ).await.unwrap();
-        
-        let (device, queue) = adapter.request_device(
-            &DeviceDescriptor {
-                required_features: Features::empty(),
-                required_limits: Limits::default(),
-                label: None,
-                memory_hints: Default::default(),
-            },
-            None, // Trace path
-        ).await.unwrap();
-        
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps.formats.iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
-        let config = SurfaceConfiguration {
-            usage: TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: PresentMode::AutoVsync,
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
-        
         let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
@@ -162,50 +114,28 @@ impl<'a> State<'a>
         let draw_object = DrawObject::new(&device, VERTICES, INDICES);
         
         return Self {
-            surface,
-            device,
-            queue,
-            config,
-            size,
-            window,
             render_pipeline,
             draw_object
         };
     }
 
-    pub fn window(&self) -> &Window
+    fn on_size(&mut self, size: Vector2<u32>)
     {
-        &self.window
+        
     }
 
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>)
-    {
-        if new_size.width > 0 && new_size.height > 0 {
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
-        }
-    }
-
-    pub fn input(&mut self, event: &WindowEvent) -> bool
+    fn input(&mut self, event: &WindowEvent) -> bool
     {
         return false;
     }
 
-    pub fn update(&mut self)
+    fn update(&mut self)
     {
         // todo!()
     }
 
-    pub fn render(&mut self) -> Result<(), SurfaceError>
+    fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView)
     {
-        let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&TextureViewDescriptor::default());
-        let mut encoder = self.device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("Render Encoder"),
-        });
-        
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
@@ -230,10 +160,5 @@ impl<'a> State<'a>
         self.draw_object.draw(&mut render_pass);
         
         drop(render_pass);
-        // submit will accept anything that implements IntoIter
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
-
-        return Ok(());
     }
 }
