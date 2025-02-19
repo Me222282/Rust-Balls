@@ -59,10 +59,10 @@ impl DrawObject
         };
     }
     
-    pub fn draw(&self, render_pass: &mut RenderPass<'_>)
+    pub fn draw(&self, render_pass: &mut RenderPass<'_>, count: u32)
     {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), self.index_format);
-        render_pass.draw_indexed(0..self.length, 0, 0..1);
+        render_pass.draw_indexed(0..self.length, 0, 0..count);
     }
 }

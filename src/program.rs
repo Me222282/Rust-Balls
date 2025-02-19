@@ -1,10 +1,10 @@
 use cgmath::Matrix4;
-use cgmath::SquareMatrix;
 use cgmath::Vector2;
 use util::BufferInitDescriptor;
 use util::DeviceExt;
 use wgpu::*;
 use winit::event::WindowEvent;
+use std::vec::Vec;
 
 use crate::maths::*;
 use crate::graphics::*;
@@ -54,15 +54,39 @@ const INDICES: &[u16] = &[
     2, 3, 0
 ];
 
-#[repr(C, align(16))]
+#[repr(C)]
 #[derive(Copy, Clone, Debug)]
 struct Uniform
 {
-    matrix: Matrix4<f32>,
-    colour: Vec3
+    matrix: Matrix4<f32>
 }
 unsafe impl bytemuck::Pod for Uniform {}
 unsafe impl bytemuck::Zeroable for Uniform {}
+
+#[repr(C, align(16))]
+#[derive(Copy, Clone, Debug)]
+struct Instance
+{
+    colour: Vec3,
+    location: Vec2,
+    radius: f32
+}
+impl Instance
+{
+    const ATTRIBS: [VertexAttribute; 3] =
+        vertex_attr_array![6 => Float32x3, 5 => Float32x2, 3 => Float32];
+    
+    fn desc() -> VertexBufferLayout<'static>
+    {
+        return VertexBufferLayout {
+            array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
+            step_mode: VertexStepMode::Instance,
+            attributes: &Self::ATTRIBS
+        }
+    }
+}
+unsafe impl bytemuck::Pod for Instance {}
+unsafe impl bytemuck::Zeroable for Instance {}
 
 pub struct Program
 {
@@ -70,7 +94,9 @@ pub struct Program
     draw_object: DrawObject,
     uniform_buffer: Buffer,
     uniform_data: Uniform,
-    bind_group: BindGroup
+    bind_group: BindGroup,
+    instances: Vec<Instance>,
+    instance_buffer: Buffer
 }
 
 impl WinFunc for Program
@@ -79,8 +105,7 @@ impl WinFunc for Program
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self
     {
         let uniform_data = Uniform {
-            matrix: Matrix4::from_scale(2.0),
-            colour: vec3(0.8, 0.7, 0.2)
+            matrix: Matrix4::from_scale(1.0)
         };
         
         let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -93,7 +118,7 @@ impl WinFunc for Program
             entries: &[
                 BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                    visibility: ShaderStages::VERTEX,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Uniform,
                         has_dynamic_offset: false,
@@ -115,6 +140,19 @@ impl WinFunc for Program
             label: Some("camera_bind_group"),
         });
         
+        let instances = vec![Instance {
+            colour: vec3(0.9, 0.4, 0.2),
+            location: vec2(0.0, 0.0),
+            radius: 0.5
+        }];
+        let instance_buffer = device.create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instances[..]),
+                usage: wgpu::BufferUsages::VERTEX,
+            }
+        );
+        
         let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
@@ -129,7 +167,7 @@ impl WinFunc for Program
                 module: &shader,
                 entry_point: Some("vs_main"),
                 // specify vertex buffer layout
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), Instance::desc()],
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(FragmentState {
@@ -171,7 +209,9 @@ impl WinFunc for Program
             draw_object,
             uniform_buffer,
             uniform_data,
-            bind_group: uniform_bind_group
+            bind_group: uniform_bind_group,
+            instances,
+            instance_buffer
         };
     }
 
@@ -212,10 +252,9 @@ impl WinFunc for Program
             timestamp_writes: None,
         });
         
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
-        self.draw_object.draw(&mut render_pass);
-        
-        // drop(render_pass);
+        self.draw_object.draw(&mut render_pass, self.instances.len() as u32);
     }
 }
