@@ -5,7 +5,7 @@ use winit::{dpi::PhysicalSize, event::{ElementState, Event, KeyEvent, WindowEven
 pub trait WinFunc where Self: Sized
 {
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self;
-    fn update(&mut self);
+    fn update(&mut self, queue: &Queue);
     fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView);
     fn input(&mut self, event: &WindowEvent) -> bool;
     fn on_size(&mut self, size: Vector2<u32>);
@@ -108,7 +108,7 @@ impl<'a, T: WinFunc> State<'a, T>
 
     pub fn update(&mut self)
     {
-        self.imp.update();
+        self.imp.update(&self.queue);
     }
 
     pub fn render(&mut self) -> Result<(), SurfaceError>

@@ -9,12 +9,19 @@ struct VertexOutput
     @location(0) uv: vec2<f32>,
 };
 
+struct Uniform {
+    matrix: mat4x4<f32>,
+    colour: vec3<f32>
+};
+@group(0) @binding(0)
+var<uniform> uni: Uniform;
+
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput
 {
     var out: VertexOutput;
     out.uv = in.uv;
-    out.clip_position = vec4<f32>(in.position, 1.0);
+    out.clip_position = uni.matrix * vec4<f32>(in.position, 1.0);
     return out;
 }
 
@@ -25,5 +32,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     {
         discard;
     }
-    return vec4<f32>(1.0, 1.0, 1.0, 1.0);
+    return vec4<f32>(uni.colour, 1.0);
 }

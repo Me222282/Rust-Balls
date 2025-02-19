@@ -1,4 +1,8 @@
+use cgmath::Matrix4;
+use cgmath::SquareMatrix;
 use cgmath::Vector2;
+use util::BufferInitDescriptor;
+use util::DeviceExt;
 use wgpu::*;
 use winit::event::WindowEvent;
 
@@ -50,11 +54,23 @@ const INDICES: &[u16] = &[
     2, 3, 0
 ];
 
+#[repr(C, align(16))]
+#[derive(Copy, Clone, Debug)]
+struct Uniform
+{
+    matrix: Matrix4<f32>,
+    colour: Vec3
+}
+unsafe impl bytemuck::Pod for Uniform {}
+unsafe impl bytemuck::Zeroable for Uniform {}
 
 pub struct Program
 {
     render_pipeline: RenderPipeline,
-    draw_object: DrawObject
+    draw_object: DrawObject,
+    uniform_buffer: Buffer,
+    uniform_data: Uniform,
+    bind_group: BindGroup
 }
 
 impl WinFunc for Program
@@ -62,10 +78,47 @@ impl WinFunc for Program
     // Creating some of the wgpu types requires async code
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self
     {
+        let uniform_data = Uniform {
+            matrix: Matrix4::from_scale(2.0),
+            colour: vec3(0.8, 0.7, 0.2)
+        };
+        
+        let uniform_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[uniform_data]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+        
+        let uniform_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            entries: &[
+                BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: ShaderStages::VERTEX | ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }
+            ],
+            label: Some("uniform_bind_group_layout"),
+        });
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &uniform_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                }
+            ],
+            label: Some("camera_bind_group"),
+        });
+        
         let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&uniform_bind_group_layout],
             push_constant_ranges: &[],
         });
         
@@ -115,7 +168,10 @@ impl WinFunc for Program
         
         return Self {
             render_pipeline,
-            draw_object
+            draw_object,
+            uniform_buffer,
+            uniform_data,
+            bind_group: uniform_bind_group
         };
     }
 
@@ -129,9 +185,9 @@ impl WinFunc for Program
         return false;
     }
 
-    fn update(&mut self)
+    fn update(&mut self, queue: &Queue)
     {
-        // todo!()
+        
     }
 
     fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView)
@@ -157,8 +213,9 @@ impl WinFunc for Program
         });
         
         render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_bind_group(0, &self.bind_group, &[]);
         self.draw_object.draw(&mut render_pass);
         
-        drop(render_pass);
+        // drop(render_pass);
     }
 }
