@@ -5,10 +5,14 @@ use util::DeviceExt;
 use wgpu::*;
 use winit::event::WindowEvent;
 use std::vec::Vec;
+use rand::prelude::*;
 
+
+use crate::ball::*;
+use crate::physics::*;
 use crate::maths::*;
 use crate::graphics::*;
-use crate::state::WinFunc;
+use crate::state::*;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -34,7 +38,7 @@ impl Vertex
     const ATTRIBS: [VertexAttribute; 2] =
         vertex_attr_array![0 => Float32x2, 1 => Float32x2];
     
-    fn desc() -> VertexBufferLayout<'static>
+        const fn desc() -> VertexBufferLayout<'static>
     {
         return VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
@@ -74,15 +78,24 @@ struct Instance
 impl Instance
 {
     const ATTRIBS: [VertexAttribute; 3] =
-        vertex_attr_array![6 => Float32x3, 5 => Float32x2, 3 => Float32];
+        vertex_attr_array![3 => Float32x3, 4 => Float32x2, 5 => Float32];
     
-    fn desc() -> VertexBufferLayout<'static>
+    const fn desc() -> VertexBufferLayout<'static>
     {
         return VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
+            array_stride: std::mem::size_of::<Instance>() as BufferAddress,
             step_mode: VertexStepMode::Instance,
             attributes: &Self::ATTRIBS
         }
+    }
+    
+    const fn from_ball(b: Ball) -> Instance
+    {
+        return Instance {
+            colour: c_to_v(b.colour),
+            location: b.location,
+            radius: b.radius
+        };
     }
 }
 unsafe impl bytemuck::Pod for Instance {}
@@ -96,7 +109,9 @@ pub struct Program
     uniform_data: Uniform,
     bind_group: BindGroup,
     instances: Vec<Instance>,
-    instance_buffer: Buffer
+    instance_buffer: Buffer,
+    
+    physics: Physics
 }
 
 impl WinFunc for Program
@@ -104,6 +119,19 @@ impl WinFunc for Program
     // Creating some of the wgpu types requires async code
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self
     {
+        let mut instances = Vec::with_capacity(100);
+        let mut physics = Physics::new(size_bounds(config.width as f32, config.height as f32));
+        let mut rand = rand::rng();
+        
+        let bounds = physics.get_bounds();
+        let range = vec2(bounds.x, bounds.w)..vec2(bounds.y, bounds.z);
+        for _ in 0..100
+        {
+            let b = Ball::random(&mut rand, &range, 1.0..5.0);
+            physics.add(b);
+            instances.push(Instance::from_ball(b));
+        }
+        
         let uniform_data = Uniform {
             matrix: Matrix4::from_scale(1.0)
         };
@@ -140,16 +168,11 @@ impl WinFunc for Program
             label: Some("camera_bind_group"),
         });
         
-        let instances = vec![Instance {
-            colour: vec3(0.9, 0.4, 0.2),
-            location: vec2(0.0, 0.0),
-            radius: 0.5
-        }];
         let instance_buffer = device.create_buffer_init(
             &wgpu::util::BufferInitDescriptor {
                 label: Some("Instance Buffer"),
                 contents: bytemuck::cast_slice(&instances[..]),
-                usage: wgpu::BufferUsages::VERTEX,
+                usage: wgpu::BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }
         );
         
@@ -211,13 +234,20 @@ impl WinFunc for Program
             uniform_data,
             bind_group: uniform_bind_group,
             instances,
-            instance_buffer
+            instance_buffer,
+            physics
         };
     }
 
     fn on_size(&mut self, size: Vector2<u32>)
     {
+        // let m: Matrix4<f32> = ortho(size.x as f32, size.y as f32).into();
+        let m = Matrix4::from_nonuniform_scale(2.0 / size.x as f32, 2.0 / size.y as f32, 1.0);
+        self.uniform_data = Uniform {
+            matrix: OPENGL_TO_WGPU_MATRIX * m
+        };
         
+        self.physics.set_bounds(size_bounds(size.x as f32, size.y as f32));
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool
@@ -227,7 +257,14 @@ impl WinFunc for Program
 
     fn update(&mut self, queue: &Queue)
     {
+        self.physics.apply_phsyics(1.0 / 60.0);
+        fill_buffer(&self.physics, &mut self.instances);
         
+        queue.write_buffer(&self.instance_buffer,
+            0, bytemuck::cast_slice(&self.instances[..]));
+        
+        queue.write_buffer(&self.uniform_buffer,
+            0, bytemuck::cast_slice(&[self.uniform_data]));
     }
 
     fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView)
@@ -252,9 +289,21 @@ impl WinFunc for Program
             timestamp_writes: None,
         });
         
-        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         render_pass.set_pipeline(&self.render_pipeline);
         render_pass.set_bind_group(0, &self.bind_group, &[]);
+        render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         self.draw_object.draw(&mut render_pass, self.instances.len() as u32);
+    }
+}
+
+fn fill_buffer(balls: &Physics, inst: &mut Vec<Instance>)
+{
+    if inst.len() != balls.count() { return; }
+    
+    let mut i = 0;
+    for b in balls
+    {
+        inst[i] = Instance::from_ball(*b);
+        i += 1;
     }
 }

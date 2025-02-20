@@ -7,6 +7,18 @@ pub type Vec3 = Vector3<real>;
 pub type Vec4 = Vector4<real>;
 pub type Colour = Vector3<u8>;
 
+pub const fn size_bounds(width: real, height: real) -> Vec4
+{
+    let hw = width * 0.5;
+    let hh = height * 0.5;
+    
+    return vec4(-hw, hw, hh, -hh);
+}
+
+pub const fn vec4(x: real, y: real, z: real, w: real) -> Vec4
+{
+    return Vec4::new(x, y, z, w);
+}
 pub const fn vec3(x: real, y: real, z: real) -> Vec3
 {
     return Vec3::new(x, y, z);
@@ -15,9 +27,15 @@ pub const fn vec2(x: real, y: real) -> Vec2
 {
     return Vec2::new(x, y);
 }
-pub const fn colour(data: [u8; 3]) -> Colour
+pub const fn colour(r: u8, g: u8, b: u8) -> Colour
 {
-    return Colour::new(data[0], data[1], data[2]);
+    return Colour::new(r, g, b);
+}
+pub const fn c_to_v(colour: Colour) -> Vec3
+{
+    return vec3(colour.x as f32 * CON_V,
+        colour.y as f32 * CON_V,
+        colour.z as f32 * CON_V);
 }
 
 trait Cast<T, const N: usize> {

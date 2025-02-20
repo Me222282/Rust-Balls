@@ -17,9 +17,9 @@ fn resolve_collisions(a: &mut Ball, b: &mut Ball)
     let mut axis: Vec2 = a.location - b.location;
     let mut dist = axis.magnitude2();
     
-    if (dist >= (sum_radius * sum_radius)) { return; }
+    if dist >= (sum_radius * sum_radius) { return; }
     
-    if (dist == 0.0)
+    if dist == 0.0
     {
         axis = (a.velocity() - b.velocity()).normalize();
     }
@@ -45,19 +45,19 @@ fn clip_to_bounds(b: &mut Ball, bounds: Vec4)
     let r = b.radius;
     let l = b.location;
     
-    if (l.x + r > bounds.x)
+    if l.x - r < bounds.x
     {
-        b.location.x = bounds.x - r;
+        b.location.x = bounds.x + r;
     }
-    if (l.x - r < bounds.z)
+    if l.x + r > bounds.y
     {
-        b.location.x = bounds.z + r;
+        b.location.x = bounds.y - r;
     }
-    if (l.y + r > bounds.y)
+    if l.y + r > bounds.z
     {
-        b.location.y = bounds.y - r;
+        b.location.y = bounds.z - r;
     }
-    if (l.y - r < bounds.w)
+    if l.y - r < bounds.w
     {
         b.location.y = bounds.w + r;
     }
@@ -101,6 +101,20 @@ impl Physics {
     pub fn add(&mut self, b: Ball)
     {
         self.balls.push(b);
+    }
+    
+    pub fn count(&self) -> usize
+    {
+        return  self.balls.len();
+    }
+    
+    pub fn get_bounds(&self) -> Vec4
+    {
+        return self.bounds;
+    }
+    pub fn set_bounds(&mut self, bounds: Vec4)
+    {
+        self.bounds = bounds;
     }
 }
 

@@ -1,7 +1,11 @@
+use rand::Rng;
+use std::ops::Range;
+
 use crate::maths::*;
 
 pub const GRAVITY: real = 1000.0;
 
+#[derive(Copy, Clone)]
 pub struct Ball
 {
     pub location: Vec2,
@@ -41,5 +45,17 @@ impl Ball
             radius: r,
             colour: c
         };
+    }
+    pub fn random<T: Rng>(rng: &mut T, pos: &Range<Vec2>, radius: Range<real>) -> Ball
+    {
+        let x = rng.random_range(pos.start.x..pos.end.x);
+        let y = rng.random_range(pos.start.y..pos.end.y);
+        let rad = rng.random_range(radius);
+        
+        let r = rng.random::<u8>();
+        let g = rng.random::<u8>();
+        let b = rng.random::<u8>();
+        
+        return Self::new(vec2(x, y), rad, colour(r, g, b));
     }
 }

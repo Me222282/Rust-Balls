@@ -11,9 +11,9 @@ struct VertexOutput
 };
 
 struct InstanceInput {
-    @location(6) colour: vec3<f32>,
-    @location(5) location: vec2<f32>,
-    @location(3) radius: f32,
+    @location(3) colour: vec3<f32>,
+    @location(4) location: vec2<f32>,
+    @location(5) radius: f32,
 };
 
 @group(0) @binding(0)
@@ -26,10 +26,10 @@ fn vs_main(in: VertexInput, inst: InstanceInput) -> VertexOutput
     out.uv = in.uv - vec2<f32>(0.5);
     out.colour = inst.colour;
     
-    var p = in.position.xy * vec2<f32>(inst.radius * 2.0);
-    p += inst.location;
+    var pos = (in.position.xy * vec2<f32>(inst.radius * 2.0));
+    pos += inst.location;
     
-    out.clip_position = matrix * vec4<f32>(p, in.position.z, 1.0);
+    out.clip_position = matrix * vec4<f32>(pos, in.position.z, 1.0);
     return out;
 }
 

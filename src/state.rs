@@ -1,6 +1,14 @@
-use cgmath::Vector2;
+use cgmath::{Matrix4, Vector2};
 use wgpu::*;
 use winit::{dpi::PhysicalSize, event::{ElementState, Event, KeyEvent, WindowEvent}, event_loop::EventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowBuilder}};
+
+#[rustfmt::skip]
+pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.5, 0.5,
+    0.0, 0.0, 0.0, 1.0,
+);
 
 pub trait WinFunc where Self: Sized
 {
@@ -91,7 +99,8 @@ impl<'a, T: WinFunc> State<'a, T>
 
     pub fn resize(&mut self, new_size: PhysicalSize<u32>)
     {
-        if new_size.width > 0 && new_size.height > 0 {
+        if new_size.width > 0 && new_size.height > 0
+        {
             self.size = new_size;
             self.config.width = new_size.width;
             self.config.height = new_size.height;
