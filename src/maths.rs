@@ -31,6 +31,7 @@ pub const fn colour(r: u8, g: u8, b: u8) -> Colour
 {
     return Colour::new(r, g, b);
 }
+const CON_V: f32 = 1.0 / 255.0;
 pub const fn c_to_v(colour: Colour) -> Vec3
 {
     return vec3(colour.x as f32 * CON_V,
@@ -38,30 +39,29 @@ pub const fn c_to_v(colour: Colour) -> Vec3
         colour.z as f32 * CON_V);
 }
 
-trait Cast<T, const N: usize> {
-    fn call(self) -> [T; N];
-}
+// trait Cast<T, const N: usize> {
+//     fn call(self) -> [T; N];
+// }
 
-impl Cast<real, 3> for Vec3 {
-    fn call(self) -> [real; 3] {
-        return [self.x, self.y, self.z];
-    }
-}
-impl Cast<real, 2> for Vec2 {
-    fn call(self) -> [real; 2] {
-        return [self.x, self.y];
-    }
-}
-impl Cast<real, 4> for Vec4 {
-    fn call(self) -> [real; 4] {
-        return [self.x, self.y, self.z, self.w];
-    }
-}
-const CON_V: f32 = 1.0 / 255.0;
-impl Cast<real, 3> for Colour {
-    fn call(self) -> [real; 3] {
-        return [self.x as f32 * CON_V,
-            self.y as f32 * CON_V,
-            self.z as f32 * CON_V];
-    }
-}
+// impl Cast<real, 3> for Vec3 {
+//     fn call(self) -> [real; 3] {
+//         return [self.x, self.y, self.z];
+//     }
+// }
+// impl Cast<real, 2> for Vec2 {
+//     fn call(self) -> [real; 2] {
+//         return [self.x, self.y];
+//     }
+// }
+// impl Cast<real, 4> for Vec4 {
+//     fn call(self) -> [real; 4] {
+//         return [self.x, self.y, self.z, self.w];
+//     }
+// }
+// impl Cast<real, 3> for Colour {
+//     fn call(self) -> [real; 3] {
+//         return [self.x as f32 * CON_V,
+//             self.y as f32 * CON_V,
+//             self.z as f32 * CON_V];
+//     }
+// }

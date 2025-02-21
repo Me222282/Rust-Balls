@@ -15,10 +15,10 @@ pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
 pub trait WinFunc where Self: Sized
 {
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self;
-    fn update(&mut self, queue: &Queue);
+    fn update(&mut self, source: &State<Self>);
     fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView, source: &State<Self>);
-    fn input(&mut self, event: &WindowEvent) -> bool;
-    fn on_size(&mut self, size: Vector2<u32>, queue: &Queue);
+    fn input(&mut self, event: &WindowEvent, source: &State<Self>) -> bool;
+    fn on_size(&mut self, size: Vector2<u32>, source: &State<Self>);
 }
 
 pub struct State<'a, T: WinFunc>
@@ -109,12 +109,12 @@ impl<'a, T: WinFunc> State<'a, T>
             self.surface.configure(&self.device, &self.config);
         }
         
-        self.imp.borrow_mut().on_size(Vector2::<u32>::new(new_size.width, new_size.height), &self.queue);
+        self.imp.borrow_mut().on_size(Vector2::<u32>::new(new_size.width, new_size.height), &self);
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool
     {
-        return self.imp.borrow_mut().input(event);
+        return self.imp.borrow_mut().input(event, &self);
     }
 
     fn render(&mut self) -> Result<(), SurfaceError>
@@ -176,8 +176,8 @@ pub async fn run<T: WinFunc>()
                         // if !surface_configured {
                         //     return;
                         // }
-            
-                        state.imp.borrow_mut().update(&state.queue);
+                        
+                        state.imp.borrow_mut().update(&state);
                         match state.render() {
                             Ok(_) => {}
                             // Reconfigure the surface if it's lost or outdated

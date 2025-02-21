@@ -5,7 +5,11 @@ use util::DeviceExt;
 use wgpu::*;
 use wgpu_text::glyph_brush::ab_glyph::FontRef;
 use wgpu_text::glyph_brush::*;
+use winit::event::ElementState;
+use winit::event::MouseButton;
 use winit::event::WindowEvent;
+use std::mem;
+use std::time::Instant;
 use std::vec::Vec;
 use wgpu_text::{BrushBuilder, TextBrush};
 
@@ -100,6 +104,16 @@ impl Instance
         };
     }
 }
+impl Default for Instance
+{
+    fn default() -> Self {
+        Self {
+            colour: vec3(0.0, 0.0, 0.0),
+            location: vec2(0.0, 0.0),
+            radius: 0.0
+        }
+    }
+}
 unsafe impl bytemuck::Pod for Instance {}
 unsafe impl bytemuck::Zeroable for Instance {}
 
@@ -115,7 +129,10 @@ pub struct Program<'a>
     
     text_manage: TextBrush<FontRef<'a>>,
     text: OwnedSection,
-    physics: Physics
+    physics: Physics,
+    click: bool,
+    m_pos: Vec2,
+    rand: rand::rngs::ThreadRng
 }
 
 impl<'a> WinFunc for Program<'a>
@@ -123,17 +140,15 @@ impl<'a> WinFunc for Program<'a>
     // Creating some of the wgpu types requires async code
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self
     {   
-        let mut instances = Vec::with_capacity(100);
+        let instances = Vec::with_capacity(100);
         let mut physics = Physics::new(size_bounds(config.width as f32, config.height as f32));
         let mut rand = rand::rng();
         
         let bounds = physics.get_bounds();
-        let range = vec2(bounds.x, bounds.w)..vec2(bounds.y, bounds.z);
         for _ in 0..100
         {
-            let b = Ball::random(&mut rand, &range, 1.0..5.0);
+            let b = ball(&mut rand, bounds);
             physics.add(b);
-            instances.push(Instance::from_ball(b));
         }
         
         let uniform_data = Uniform {
@@ -179,7 +194,6 @@ impl<'a> WinFunc for Program<'a>
                 usage: wgpu::BufferUsages::VERTEX | BufferUsages::COPY_DST,
             }
         );
-        
         
         let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -251,13 +265,17 @@ impl<'a> WinFunc for Program<'a>
             bind_group: uniform_bind_group,
             instances,
             instance_buffer,
+            
             text_manage: brush,
             text: section,
-            physics
+            physics,
+            click: false,
+            m_pos: vec2(0.0, 0.0),
+            rand
         };
     }
 
-    fn on_size(&mut self, size: Vector2<u32>, queue: &Queue)
+    fn on_size(&mut self, size: Vector2<u32>, source: &State<Self>)
     {
         let size = vec2(size.x as f32, size.y as f32);
         
@@ -268,36 +286,76 @@ impl<'a> WinFunc for Program<'a>
         };
         
         self.physics.set_bounds(size_bounds(size.x, size.y));
-        self.text_manage.resize_view(size.x, size.y, &queue);
+        self.text_manage.resize_view(size.x, size.y, &source.queue);
         
         self.text.screen_position = (size.x * 0.5, size.y * 0.5);
     }
 
-    fn input(&mut self, event: &WindowEvent) -> bool
+    fn input(&mut self, event: &WindowEvent, source: &State<Self>) -> bool
     {
-        return false;
+        return match event
+        {
+            WindowEvent::MouseInput { device_id: _, state, button } =>
+            {
+                if *button == MouseButton::Left
+                {
+                    self.click = *state == ElementState::Pressed;
+                }
+                
+                return true;
+            }
+            WindowEvent::CursorMoved { device_id: _, position } =>
+            {
+                let p = vec2(position.x as f32, position.y as f32);
+                let s = vec2(source.size.width as f32, source.size.height as f32);
+                self.m_pos = vec2(p.x - (s.x * 0.5), (s.y * 0.5) - p.y);
+                return true;
+            }
+            _ => false
+        };
     }
 
-    fn update(&mut self, queue: &Queue)
+    fn update(&mut self, source: &State<Self>)
     {
-        self.physics.apply_phsyics(1.0 / 60.0);
+        if self.click
+        {
+            let b = vec4(self.m_pos.x, self.m_pos.x + 0.1, self.m_pos.y + 0.1, self.m_pos.y);
+            self.physics.add(ball(&mut self.rand, b));
+        }
+        
+        let t = Instant::now();
+        self.physics.apply_phsyics_sub(1.0 / 60.0, 4);
+        let dt = Instant::now().duration_since(t);
+        
         fill_buffer(&self.physics, &mut self.instances);
         
-        queue.write_buffer(&self.instance_buffer,
-            0, bytemuck::cast_slice(&self.instances[..]));
+        let s = self.instances.len().to_string();
+        self.text.text.clear();
+        self.text.text.push(text(dt.as_secs_f32().to_string() + "\n"));
+        self.text.text.push(text(s));
         
-        queue.write_buffer(&self.uniform_buffer,
-            0, bytemuck::cast_slice(&[self.uniform_data]));
+        if self.instance_buffer.size() < (self.instances.len() * mem::size_of::<Instance>()) as u64
+        {
+            self.instance_buffer = source.device.create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Instance Buffer"),
+                    contents: bytemuck::cast_slice(&self.instances[..]),
+                    usage: wgpu::BufferUsages::VERTEX | BufferUsages::COPY_DST,
+                }
+            );
+        }
+        else
+        {
+            source.queue.write_buffer(&self.instance_buffer, 0,
+                bytemuck::cast_slice(&self.instances[..]));
+        }
+        
+        source.queue.write_buffer(&self.uniform_buffer, 0,
+            bytemuck::cast_slice(&[self.uniform_data]));
     }
     
     fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView, source: &State<Self>)
     {
-        let num_balls = self.instances.len();
-        
-        let s = num_balls.to_string();
-        self.text.text.clear();
-        self.text.text.push(text(s));
-        
         self.text_manage.queue(&source.device, &source.queue, [&self.text]).unwrap();
         
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
@@ -331,7 +389,10 @@ impl<'a> WinFunc for Program<'a>
 
 fn fill_buffer(balls: &Physics, inst: &mut Vec<Instance>)
 {
-    if inst.len() != balls.count() { return; }
+    if inst.len() != balls.count()
+    {
+        inst.resize(balls.count(), Instance::default());
+    }
     
     let mut i = 0;
     for b in balls
@@ -347,4 +408,10 @@ fn text(str: String) -> OwnedText
     return OwnedText::new(str)
         .with_scale(15.0)
         .with_color([1.0; 4]);
+}
+#[inline(always)]
+fn ball<T: rand::Rng>(rand: &mut T, bounds: Vec4) -> Ball
+{
+    let range = vec2(bounds.x, bounds.w)..vec2(bounds.y, bounds.z);
+    return Ball::random(rand, &range, 1.0..5.0);
 }

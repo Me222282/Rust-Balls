@@ -90,10 +90,15 @@ impl Physics {
         }
     }
     
-    // pub fn apply_phsyics_sub(&mut self, dt: real, sub: u8)
-    // {
+    pub fn apply_phsyics_sub(&mut self, dt: real, sub: u8)
+    {
+        let dt = dt / sub as real;
         
-    // }
+        for _ in 0..sub
+        {
+            self.apply_phsyics(dt);
+        }
+    }
     
     pub fn new(bounds: Vec4) -> Physics
     {
