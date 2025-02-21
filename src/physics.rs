@@ -90,6 +90,11 @@ impl Physics {
         }
     }
     
+    // pub fn apply_phsyics_sub(&mut self, dt: real, sub: u8)
+    // {
+        
+    // }
+    
     pub fn new(bounds: Vec4) -> Physics
     {
         return Physics {
@@ -105,7 +110,7 @@ impl Physics {
     
     pub fn count(&self) -> usize
     {
-        return  self.balls.len();
+        return self.balls.len();
     }
     
     pub fn get_bounds(&self) -> Vec4

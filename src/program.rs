@@ -3,9 +3,11 @@ use cgmath::Vector2;
 use util::BufferInitDescriptor;
 use util::DeviceExt;
 use wgpu::*;
+use wgpu_text::glyph_brush::ab_glyph::FontRef;
+use wgpu_text::glyph_brush::*;
 use winit::event::WindowEvent;
 use std::vec::Vec;
-use rand::prelude::*;
+use wgpu_text::{BrushBuilder, TextBrush};
 
 
 use crate::ball::*;
@@ -101,7 +103,7 @@ impl Instance
 unsafe impl bytemuck::Pod for Instance {}
 unsafe impl bytemuck::Zeroable for Instance {}
 
-pub struct Program
+pub struct Program<'a>
 {
     render_pipeline: RenderPipeline,
     draw_object: DrawObject,
@@ -111,14 +113,16 @@ pub struct Program
     instances: Vec<Instance>,
     instance_buffer: Buffer,
     
+    text_manage: TextBrush<FontRef<'a>>,
+    text: OwnedSection,
     physics: Physics
 }
 
-impl WinFunc for Program
+impl<'a> WinFunc for Program<'a>
 {
     // Creating some of the wgpu types requires async code
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self
-    {
+    {   
         let mut instances = Vec::with_capacity(100);
         let mut physics = Physics::new(size_bounds(config.width as f32, config.height as f32));
         let mut rand = rand::rng();
@@ -176,6 +180,7 @@ impl WinFunc for Program
             }
         );
         
+        
         let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
         let render_pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Render Pipeline Layout"),
@@ -227,6 +232,17 @@ impl WinFunc for Program
         
         let draw_object = DrawObject::new(&device, VERTICES, INDICES);
         
+        let font = include_bytes!("Nunito.ttf");
+        let brush = BrushBuilder::using_font_bytes(font).unwrap()
+            .build(device, config.width, config.height, config.format);
+        
+        let section = OwnedSection::default()
+            .with_layout(
+                Layout::default()
+                    .v_align(VerticalAlign::Center)
+                    .h_align(HorizontalAlign::Center))
+            .with_screen_position((config.width as f32 * 0.5, config.height as f32 * 0.5));
+        
         return Self {
             render_pipeline,
             draw_object,
@@ -235,19 +251,26 @@ impl WinFunc for Program
             bind_group: uniform_bind_group,
             instances,
             instance_buffer,
+            text_manage: brush,
+            text: section,
             physics
         };
     }
 
-    fn on_size(&mut self, size: Vector2<u32>)
+    fn on_size(&mut self, size: Vector2<u32>, queue: &Queue)
     {
-        // let m: Matrix4<f32> = ortho(size.x as f32, size.y as f32).into();
-        let m = Matrix4::from_nonuniform_scale(2.0 / size.x as f32, 2.0 / size.y as f32, 1.0);
+        let size = vec2(size.x as f32, size.y as f32);
+        
+        // let m: Matrix4<f32> = ortho(size.x, size.y).into();
+        let m = Matrix4::from_nonuniform_scale(2.0 / size.x, 2.0 / size.y, 1.0);
         self.uniform_data = Uniform {
             matrix: OPENGL_TO_WGPU_MATRIX * m
         };
         
-        self.physics.set_bounds(size_bounds(size.x as f32, size.y as f32));
+        self.physics.set_bounds(size_bounds(size.x, size.y));
+        self.text_manage.resize_view(size.x, size.y, &queue);
+        
+        self.text.screen_position = (size.x * 0.5, size.y * 0.5);
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool
@@ -266,20 +289,28 @@ impl WinFunc for Program
         queue.write_buffer(&self.uniform_buffer,
             0, bytemuck::cast_slice(&[self.uniform_data]));
     }
-
-    fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView)
+    
+    fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView, source: &State<Self>)
     {
+        let num_balls = self.instances.len();
+        
+        let s = num_balls.to_string();
+        self.text.text.clear();
+        self.text.text.push(text(s));
+        
+        self.text_manage.queue(&source.device, &source.queue, [&self.text]).unwrap();
+        
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Render Pass"),
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: &view,
                 resolve_target: None,
                 ops: Operations {
-                    load: LoadOp::Clear(Color {
-                        r: 0.1,
-                        g: 0.2,
-                        b: 0.3,
-                        a: 1.0,
+                    load: LoadOp::Clear(wgpu::Color {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 0.0,
                     }),
                     store: StoreOp::Store,
                 },
@@ -293,6 +324,8 @@ impl WinFunc for Program
         render_pass.set_bind_group(0, &self.bind_group, &[]);
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         self.draw_object.draw(&mut render_pass, self.instances.len() as u32);
+        
+        self.text_manage.draw(&mut render_pass);
     }
 }
 
@@ -306,4 +339,12 @@ fn fill_buffer(balls: &Physics, inst: &mut Vec<Instance>)
         inst[i] = Instance::from_ball(*b);
         i += 1;
     }
+}
+
+#[inline(always)]
+fn text(str: String) -> OwnedText
+{
+    return OwnedText::new(str)
+        .with_scale(15.0)
+        .with_color([1.0; 4]);
 }

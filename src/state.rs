@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use cgmath::{Matrix4, Vector2};
 use wgpu::*;
 use winit::{dpi::PhysicalSize, event::{ElementState, Event, KeyEvent, WindowEvent}, event_loop::EventLoop, keyboard::{KeyCode, PhysicalKey}, window::{Window, WindowBuilder}};
@@ -14,20 +16,20 @@ pub trait WinFunc where Self: Sized
 {
     fn new(device: &Device, config: &SurfaceConfiguration) -> Self;
     fn update(&mut self, queue: &Queue);
-    fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView);
+    fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView, source: &State<Self>);
     fn input(&mut self, event: &WindowEvent) -> bool;
-    fn on_size(&mut self, size: Vector2<u32>);
+    fn on_size(&mut self, size: Vector2<u32>, queue: &Queue);
 }
 
 pub struct State<'a, T: WinFunc>
 {
-    surface: Surface<'a>,
-    device: Device,
-    queue: Queue,
-    config: SurfaceConfiguration,
+    pub surface: Surface<'a>,
+    pub device: Device,
+    pub queue: Queue,
+    pub config: SurfaceConfiguration,
     pub size: winit::dpi::PhysicalSize<u32>,
-    window: &'a Window,
-    imp: T
+    pub window: &'a Window,
+    imp: RefCell<T>
 }
 
 impl<'a, T: WinFunc> State<'a, T>
@@ -38,7 +40,7 @@ impl<'a, T: WinFunc> State<'a, T>
         let size = window.inner_size();
 
         // The instance is a handle to our GPU
-        let instance = Instance::new(InstanceDescriptor {
+        let instance = Instance::new(&InstanceDescriptor {
             backends: Backends::VULKAN,
             ..Default::default()
         });
@@ -79,7 +81,7 @@ impl<'a, T: WinFunc> State<'a, T>
             desired_maximum_frame_latency: 2,
         };
         
-        let imp = T::new(&device, &config);
+        let imp = RefCell::new(T::new(&device, &config));
         
         return Self {
             surface,
@@ -92,12 +94,12 @@ impl<'a, T: WinFunc> State<'a, T>
         };
     }
 
-    pub fn window(&self) -> &Window
+    fn window(&self) -> &Window
     {
         return &self.window;
     }
 
-    pub fn resize(&mut self, new_size: PhysicalSize<u32>)
+    fn resize(&mut self, new_size: PhysicalSize<u32>)
     {
         if new_size.width > 0 && new_size.height > 0
         {
@@ -107,20 +109,15 @@ impl<'a, T: WinFunc> State<'a, T>
             self.surface.configure(&self.device, &self.config);
         }
         
-        self.imp.on_size(Vector2::<u32>::new(new_size.width, new_size.height));
+        self.imp.borrow_mut().on_size(Vector2::<u32>::new(new_size.width, new_size.height), &self.queue);
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool
+    fn input(&mut self, event: &WindowEvent) -> bool
     {
-        return self.imp.input(event);
+        return self.imp.borrow_mut().input(event);
     }
 
-    pub fn update(&mut self)
-    {
-        self.imp.update(&self.queue);
-    }
-
-    pub fn render(&mut self) -> Result<(), SurfaceError>
+    fn render(&mut self) -> Result<(), SurfaceError>
     {
         let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&TextureViewDescriptor::default());
@@ -128,7 +125,7 @@ impl<'a, T: WinFunc> State<'a, T>
             label: Some("Render Encoder"),
         });
         
-        self.imp.render(&mut encoder, &view);
+        self.imp.borrow_mut().render(&mut encoder, &view, &self);
         
         // submit will accept anything that implements IntoIter
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -180,7 +177,7 @@ pub async fn run<T: WinFunc>()
                         //     return;
                         // }
             
-                        state.update();
+                        state.imp.borrow_mut().update(&state.queue);
                         match state.render() {
                             Ok(_) => {}
                             // Reconfigure the surface if it's lost or outdated
@@ -196,6 +193,10 @@ pub async fn run<T: WinFunc>()
                             // This happens when the a frame takes too long to present
                             Err(SurfaceError::Timeout) => {
                                 log::warn!("Surface timeout")
+                            }
+                            Err(SurfaceError::Other) => {
+                                log::error!("ERROR");
+                                control_flow.exit();
                             }
                         }
                     }
