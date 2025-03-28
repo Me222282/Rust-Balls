@@ -19,6 +19,7 @@ use crate::physics::*;
 use crate::maths::*;
 use crate::graphics::*;
 use crate::state::*;
+use crate::helpers::*;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
@@ -44,7 +45,7 @@ impl Vertex
     const ATTRIBS: [VertexAttribute; 2] =
         vertex_attr_array![0 => Float32x2, 1 => Float32x2];
     
-        const fn desc() -> VertexBufferLayout<'static>
+    const fn desc() -> VertexBufferLayout<'static>
     {
         return VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as BufferAddress,
@@ -127,7 +128,7 @@ pub struct Program<'a>
     instances: Vec<Instance>,
     instance_buffer: Buffer,
     
-    text_manage: TextBrush<FontRef<'a>>,
+    text_manager: TextBrush<FontRef<'a>>,
     text: OwnedSection,
     physics: Physics,
     click: bool,
@@ -202,47 +203,8 @@ impl<'a> WinFunc for Program<'a>
             push_constant_ranges: &[],
         });
         
-        let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"),
-                // specify vertex buffer layout
-                buffers: &[Vertex::desc(), Instance::desc()],
-                compilation_options: PipelineCompilationOptions::default(),
-            },
-            fragment: Some(FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"),
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-                compilation_options: PipelineCompilationOptions::default(),
-            }),
-            primitive: PrimitiveState {
-                topology: PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: FrontFace::Ccw,
-                cull_mode: Some(Face::Back),
-                // Setting this to anything other than Fill requires Features::NON_FILL_POLYGON_MODE
-                polygon_mode: PolygonMode::Fill,
-                // Requires Features::DEPTH_CLIP_CONTROL
-                unclipped_depth: false,
-                // Requires Features::CONSERVATIVE_RASTERIZATION
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None
-        });
+        let render_pipeline = pipeline![device, render_pipeline_layout, shader, config;
+            Vertex::desc(), Instance::desc()];
         
         let draw_object = DrawObject::new(&device, VERTICES, INDICES);
         
@@ -266,7 +228,7 @@ impl<'a> WinFunc for Program<'a>
             instances,
             instance_buffer,
             
-            text_manage: brush,
+            text_manager: brush,
             text: section,
             physics,
             click: false,
@@ -286,7 +248,7 @@ impl<'a> WinFunc for Program<'a>
         };
         
         self.physics.set_bounds(size_bounds(size.x, size.y));
-        self.text_manage.resize_view(size.x, size.y, &source.queue);
+        self.text_manager.resize_view(size.x, size.y, &source.queue);
         
         self.text.screen_position = (size.x * 0.5, size.y * 0.5);
     }
@@ -331,7 +293,7 @@ impl<'a> WinFunc for Program<'a>
         
         let s = self.instances.len().to_string();
         self.text.text.clear();
-        self.text.text.push(text(dt.as_secs_f32().to_string() + "\n"));
+        self.text.text.push(text((dt.as_secs_f32() * 1000_f32).to_string() + "\n"));
         self.text.text.push(text(s));
         
         if self.instance_buffer.size() < (self.instances.len() * mem::size_of::<Instance>()) as u64
@@ -356,7 +318,7 @@ impl<'a> WinFunc for Program<'a>
     
     fn render(&mut self, encoder: &mut CommandEncoder, view: &TextureView, source: &State<Self>)
     {
-        self.text_manage.queue(&source.device, &source.queue, [&self.text]).unwrap();
+        self.text_manager.queue(&source.device, &source.queue, [&self.text]).unwrap();
         
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Render Pass"),
@@ -383,7 +345,7 @@ impl<'a> WinFunc for Program<'a>
         render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
         self.draw_object.draw(&mut render_pass, self.instances.len() as u32);
         
-        self.text_manage.draw(&mut render_pass);
+        self.text_manager.draw(&mut render_pass);
     }
 }
 

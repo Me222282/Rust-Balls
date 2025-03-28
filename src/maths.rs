@@ -1,4 +1,4 @@
-use cgmath::{Vector2, Vector3, Vector4};
+use cgmath::{InnerSpace, Vector2, Vector3, Vector4};
 
 #[allow(non_camel_case_types)]
 pub type real = f32;
@@ -11,12 +11,11 @@ pub const fn size_bounds(width: real, height: real) -> Vec4
 {
     let hw = width * 0.5;
     let hh = height * 0.5;
-    
     return vec4(-hw, hw, hh, -hh);
 }
 
 pub const fn vec4(x: real, y: real, z: real, w: real) -> Vec4
-{
+{   
     return Vec4::new(x, y, z, w);
 }
 pub const fn vec3(x: real, y: real, z: real) -> Vec3

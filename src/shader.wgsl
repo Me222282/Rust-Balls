@@ -36,9 +36,6 @@ fn vs_main(in: VertexInput, inst: InstanceInput) -> VertexOutput
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let p = in.uv;
-    if ((p.x * p.x + p.y * p.y) > 0.25)
-    {
-        discard;
-    }
+    if ((p.x * p.x + p.y * p.y) > 0.25) { discard; }
     return vec4<f32>(in.colour, 1.0);
 }
